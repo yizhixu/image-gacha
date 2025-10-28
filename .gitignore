@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+.vercel/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Output files
+outputs/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Lockfiles (choose one in your workflow)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+

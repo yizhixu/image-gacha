@@ -1,0 +1,50 @@
+import { kieGenerate, extractImages, KieImageItem } from "./kieClient"
+import { CommonParams } from "./types"
+
+export async function nanoTxt2Img(params: CommonParams) {
+  const endpoint = process.env.KIE_NANOBANANA_T2I_ENDPOINT || ""
+  const apiKey = process.env.KIE_API_KEY || ""
+  const payload: Record<string, unknown> = {
+    prompt: params.prompt,
+    negative_prompt: params.negativePrompt,
+    width: params.width,
+    height: params.height,
+    steps: params.steps,
+    guidance: params.cfg,
+    sampler: params.sampler,
+    seed: params.seed
+  }
+  const resp = await kieGenerate({ endpoint, apiKey, payload, signal: params.signal })
+  return normalizeItems(resp, "png")
+}
+
+export async function nanoEdit(params: CommonParams) {
+  const endpoint = process.env.KIE_NANOBANANA_EDIT_ENDPOINT || ""
+  const apiKey = process.env.KIE_API_KEY || ""
+  const payload: Record<string, unknown> = {
+    prompt: params.prompt,
+    negative_prompt: params.negativePrompt,
+    image: params.imageBase64,
+    mask: params.maskBase64,
+    strength: params.strength,
+    width: params.width,
+    height: params.height,
+    steps: params.steps,
+    guidance: params.cfg,
+    sampler: params.sampler,
+    seed: params.seed
+  }
+  const resp = await kieGenerate({ endpoint, apiKey, payload, signal: params.signal })
+  return normalizeItems(resp, "png")
+}
+
+function normalizeItems(resp: any, fallbackFormat: string) {
+  const items = extractImages(resp)
+  return items.map((it: KieImageItem) => ({
+    base64: it.base64 || it.b64_json,
+    url: it.url,
+    format: it.format || fallbackFormat,
+    seed: it.seed
+  }))
+}
+
