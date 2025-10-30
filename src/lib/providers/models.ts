@@ -50,7 +50,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     displayName: "Flux.1 Kontext",
     defaultModelName: "black-forest-labs/FLUX.1-dev",
     endpointEnvVar: "KIE_FLUX1_KONTEXT_ENDPOINT",
-    mode: "txt2img"
+    mode: "img2img"
   },
   qwen_edit: {
     id: "qwen_edit",
@@ -61,4 +61,3 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     mode: "img2img"
   }
 }
-

@@ -15,24 +15,21 @@ export type ModelId = z.infer<typeof ModelIdSchema>
 
 export const ModelRequestSchema = z.object({
   modelId: ModelIdSchema,
-  count: z.number().int().positive()
+  count: z.number().int().min(1).max(10)
 })
 export type ModelRequest = z.infer<typeof ModelRequestSchema>
 
 export const JobCreateSchema = z.object({
   mode: ModeSchema,
   prompt: z.string().min(1),
-  negativePrompt: z.string().optional(),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
-  steps: z.number().int().positive().optional(),
-  cfg: z.number().positive().optional(),
-  sampler: z.string().optional(),
+  resolution: z.enum(["1K", "2K", "4K"]).optional(),
+  aspect: z.enum(["21:9", "16:9", "9:16"]).optional(),
   seedStrategy: z.enum(["random", "fixed", "increment"]).default("random"),
   seed: z.number().int().optional(),
-  strength: z.number().min(0).max(1).optional(),
   imageBase64: z.string().optional(),
-  maskBase64: z.string().optional(),
+  imageBase64s: z.array(z.string()).optional(),
+  optimizePrompt: z.boolean().optional().default(true),
+  optimizeModel: z.enum(["openai/gpt-5", "anthropic/claude-sonnet-4.5"]).optional(),
   models: z.array(ModelRequestSchema).min(1)
 })
 export type JobCreateInput = z.infer<typeof JobCreateSchema>
@@ -50,6 +47,7 @@ export interface Subtask {
   provider: string
   modelName: string
   outputRelativePath?: string
+  usedPrompt?: string
 }
 
 export interface Job {
@@ -65,6 +63,7 @@ export interface Job {
     failed: number
     cancelled: number
   }
+  optimizedPrompts?: string[]
 }
 
 export type SseEvent =
@@ -73,4 +72,3 @@ export type SseEvent =
   | { type: "task_result"; subtask: Subtask }
   | { type: "job_complete"; job: Job }
   | { type: "job_cancelled"; job: Job }
-

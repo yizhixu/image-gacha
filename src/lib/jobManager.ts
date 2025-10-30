@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events"
 import path from "node:path"
-import { nanoid as makeId } from "@/lib/utils"
+// import { nanoid as makeId } from "@/lib/utils"
 import { Job, JobCreateInput, Subtask, SseEvent } from "@/lib/jobTypes"
 import { MODELS } from "@/lib/providers/models"
 import type { NormalizedImage } from "@/lib/providers/types"
 import { saveBuffer, saveJson, OUTPUT_ROOT } from "@/lib/storage"
+import { optimizePrompt, optimizePrompts } from "@/lib/promptEnhancer"
 
 type Listener = (ev: SseEvent) => void
 
@@ -14,7 +15,7 @@ class JobStore {
   private controllers = new Map<string, AbortController>()
 
   createJob(input: JobCreateInput): Job {
-    const id = makeId()
+    const id = makeTimestampId()
     const subtasks: Subtask[] = []
     let subIndex = 0
     for (const m of input.models) {
@@ -78,10 +79,31 @@ class JobStore {
     job.status = "running"
     this.emit(id, { type: "job_start", job })
 
+    // Optimize prompt once per job (if enabled)
+    if (job.input.optimizePrompt !== false) {
+      try {
+        const controller = this.controllers.get(id)
+        const maxCount = Math.max(1, ...job.input.models.map((m) => m.count || 1))
+        const list = await optimizePrompts(
+          job.input.prompt,
+          controller?.signal,
+          job.input.optimizeModel,
+          maxCount
+        )
+        job.optimizedPrompts = list
+      } catch {
+        // ignore optimizer errors; fall back to original prompt
+        job.optimizedPrompts = [job.input.prompt]
+      }
+    } else {
+      job.optimizedPrompts = [job.input.prompt]
+    }
+
     const controller = this.controllers.get(id)
     const subPromises = job.subtasks.map((st) => this.runSubtask(job, st, controller?.signal))
     await Promise.allSettled(subPromises)
-    if (job.status !== "cancelled") {
+    // Re-read job status to avoid TS narrowing on the local variable
+    if (this.jobs.get(id)?.status !== "cancelled") {
       job.status = "completed"
       await this.writeSummary(job)
       this.emit(id, { type: "job_complete", job })
@@ -125,18 +147,16 @@ class JobStore {
     this.emit(job.id, { type: "task_update", subtask: { ...st } })
 
     try {
+      const prompts = job.optimizedPrompts && job.optimizedPrompts.length > 0 ? job.optimizedPrompts : [job.input.prompt]
+      const promptForThis = prompts[Math.min(st.index, prompts.length - 1)] || prompts[0]
+      st.usedPrompt = promptForThis
       const images = await callProvider(st.modelId, {
-        prompt: job.input.prompt,
-        negativePrompt: job.input.negativePrompt,
-        width: job.input.width,
-        height: job.input.height,
-        steps: job.input.steps,
-        cfg: job.input.cfg,
-        sampler: job.input.sampler,
+        prompt: promptForThis,
+        resolution: job.input.resolution,
+        aspect: job.input.aspect,
         seed: st.seed,
         imageBase64: job.input.imageBase64,
-        maskBase64: job.input.maskBase64,
-        strength: job.input.strength,
+        imageBase64s: job.input.imageBase64s,
         signal
       })
       const first = images[0]
@@ -146,7 +166,7 @@ class JobStore {
       this.updateCounters(job)
       this.emit(job.id, { type: "task_result", subtask: { ...st } })
     } catch (err: any) {
-      if (job.status === "cancelled") return
+      if (this.jobs.get(job.id)?.status === "cancelled") return
       st.status = "failed"
       st.error = err?.message || "Unknown error"
       this.updateCounters(job)
@@ -156,8 +176,10 @@ class JobStore {
 
   private async persistOutput(st: Subtask, img: NormalizedImage) {
     const ext = (img.format || "png").replace(".", "")
-    const fileName = `seed-${st.seed ?? "na"}__n-${st.index}.${ext}`
-    const rel = `${st.provider}/${st.modelName}/${fileName}`
+    const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]+/g, "_")
+    const base = `${safe(st.provider)}__${safe(st.modelName)}__seed-${st.seed ?? "na"}__n-${st.index}`
+    const fileName = `${base}.${ext}`
+    const rel = `${fileName}`
     const abs = path.join(OUTPUT_ROOT, st.jobId, rel)
     if (img.base64) {
       const base64 = img.base64.replace(/^data:image\/[a-zA-Z]+;base64,/, "")
@@ -170,13 +192,14 @@ class JobStore {
     } else {
       await saveBuffer(abs, Buffer.from(""))
     }
-    const metaAbs = path.join(OUTPUT_ROOT, st.jobId, st.provider, st.modelName, `seed-${st.seed ?? "na"}__n-${st.index}.json`)
+    const metaAbs = path.join(OUTPUT_ROOT, st.jobId, "meta", `${base}.json`)
     await saveJson(metaAbs, {
       subtaskId: st.id,
       jobId: st.jobId,
       provider: st.provider,
       model: st.modelName,
       seed: st.seed,
+      prompt: st.usedPrompt,
       createdAt: Date.now()
     })
     return rel
@@ -205,6 +228,18 @@ class JobStore {
   }
 }
 
+function makeTimestampId(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const y = d.getFullYear()
+  const m = pad(d.getMonth() + 1)
+  const day = pad(d.getDate())
+  const hh = pad(d.getHours())
+  const mm = pad(d.getMinutes())
+  const ss = pad(d.getSeconds())
+  return `${y}${m}${day}-${hh}${mm}${ss}`
+}
+
 async function callProvider(modelId: string, params: any): Promise<NormalizedImage[]> {
   const { seedreamTxt2Img, seedreamEdit } = await import("@/lib/providers/seedream")
   const { nanoTxt2Img, nanoEdit } = await import("@/lib/providers/nano")
@@ -219,5 +254,5 @@ async function callProvider(modelId: string, params: any): Promise<NormalizedIma
   throw new Error(`Unknown model: ${modelId}`)
 }
 
-export const jobStore = new JobStore()
-
+const g = globalThis as any
+export const jobStore: JobStore = g.__KIE_JOB_STORE__ || (g.__KIE_JOB_STORE__ = new JobStore())

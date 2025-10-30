@@ -28,8 +28,11 @@ Endpoints vary by product and model. This repo keeps them configurable via envir
 - `KIE_NANOBANANA_EDIT_ENDPOINT`
 - `KIE_FLUX1_KONTEXT_ENDPOINT`
 - `KIE_QWEN_IMAGE_EDIT_ENDPOINT`
+- `KIE_FILE_BASE64_UPLOAD_ENDPOINT` (optional, defaults to `https://kieai.redpandaai.co/api/file-base64-upload`)
 
-Set each to the exact API endpoint for your account and plan. The adapter assumes JSON request/response with either `base64` or `image_url` in the payload. If your API shape differs, adjust the mapping in `src/lib/providers/*`.
+Set each to the exact API endpoint for your account and plan. For Nano Banana / Seedream / Qwen Image Edit, requests go through the unified jobs API (`POST /api/v1/jobs/createTask` + `GET /api/v1/jobs/recordInfo`). Flux.1 Kontext uses its product endpoint (`/api/v1/flux/kontext/*`).
+
+If you pass base64 images for edit models, the server will auto-upload them to temporary storage via `KIE_FILE_BASE64_UPLOAD_ENDPOINT` and then send the resulting URL to the model.
 
 ## Development Notes
 - This app is intended for serverful Node.js (filesystem access). If deploying serverless, replace file writes and file-serving routes.
@@ -40,4 +43,3 @@ Set each to the exact API endpoint for your account and plan. The adapter assume
 - `npm run dev` – Start dev server
 - `npm run build` – Build for production
 - `npm run start` – Run production server
-

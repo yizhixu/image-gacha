@@ -1,15 +1,10 @@
 export interface CommonParams {
   prompt: string
-  negativePrompt?: string
-  width?: number
-  height?: number
-  steps?: number
-  cfg?: number
-  sampler?: string
+  resolution?: "1K" | "2K" | "4K"
+  aspect?: "21:9" | "16:9" | "9:16"
   seed?: number
   imageBase64?: string
-  maskBase64?: string
-  strength?: number
+  imageBase64s?: string[]
   signal?: AbortSignal
 }
 
@@ -19,4 +14,3 @@ export interface NormalizedImage {
   format?: string
   seed?: number
 }
-
