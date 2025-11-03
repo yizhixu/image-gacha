@@ -40,6 +40,7 @@ export default function HomePage() {
   const [modelCounts, setModelCounts] = useState<Record<string, number>>(() => {
     return Object.fromEntries(ALL_MODELS.map((m) => [m.id, m.defaultCount]))
   })
+  const [modelCountsTouched, setModelCountsTouched] = useState<boolean>(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [events, setEvents] = useState<SseEvent[]>([])
   type OutputItem = { subtaskId: string; url: string; modelId: string; modelName: string; usedPrompt?: string; jobId: string }
@@ -118,6 +119,17 @@ export default function HomePage() {
       setOptimizePrompt(mode === "txt2img")
     }
   }, [mode, optimizePromptTouched])
+  useEffect(() => {
+    // When switching to img2img, default counts: nano_edit = 1, others = 0 (unless user already adjusted)
+    if (!modelCountsTouched && mode === "img2img") {
+      const next: Record<string, number> = {}
+      for (const m of ALL_MODELS) {
+        if (m.id === "nano_edit") next[m.id] = 1
+        else next[m.id] = 0
+      }
+      setModelCounts(next)
+    }
+  }, [mode, modelCountsTouched])
 
   async function handleSubmit() {
     const payload = {
@@ -528,7 +540,10 @@ export default function HomePage() {
                   max={10}
                   value={modelCounts[m.id] ?? 0}
                   onChange={(e) =>
-                    setModelCounts((prev) => ({ ...prev, [m.id]: Math.max(0, Math.min(10, Number(e.target.value))) }))
+                    {
+                      setModelCountsTouched(true)
+                      setModelCounts((prev) => ({ ...prev, [m.id]: Math.max(0, Math.min(10, Number(e.target.value))) }))
+                    }
                   }
                   style={{ width: 100 }}
                 />
